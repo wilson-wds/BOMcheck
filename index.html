@@ -48,6 +48,8 @@
         <div id="status" class="text-center my-6 text-lg text-gray-600"></div>
 
         <div id="results-container" class="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <!-- 內部重複項目 -->
+            <div id="duplicate-items" class="bg-white p-6 rounded-lg shadow-md hidden lg:col-span-2"></div>
             <!-- 數量不同 -->
             <div id="quantity-mismatch-items" class="bg-white p-6 rounded-lg shadow-md hidden lg:col-span-2"></div>
             <!-- 共同項目 -->
@@ -76,6 +78,7 @@
             
             // 清空舊的結果和狀態
             statusDiv.innerHTML = '';
+            document.getElementById('duplicate-items').classList.add('hidden');
             document.getElementById('quantity-mismatch-items').classList.add('hidden');
             document.getElementById('common-items').classList.add('hidden');
             document.getElementById('bom1-only-items').classList.add('hidden');
@@ -134,7 +137,6 @@
 
                 const row = rowText.split(',');
                 
-                // **重要修正**: 確保每行至少有8個欄位，不足則補上空字串
                 while (row.length < 8) {
                     row.push('');
                 }
@@ -149,6 +151,13 @@
             
             statusDiv.innerHTML += `<br>BOM 1: ${bom1Items.length} 項 | BOM 2: ${bom2Items.length} 項`;
 
+            // 1. 找出內部重複項目
+            const duplicates1 = findDuplicates(bom1Items, 'BOM 1');
+            const duplicates2 = findDuplicates(bom2Items, 'BOM 2');
+            const allDuplicates = [...duplicates1, ...duplicates2];
+            renderDuplicatesTable('duplicate-items', '內部重複項目', allDuplicates, ['#EF4444', '#DC2626']); // 紅色
+
+            // 2. 比較兩個BOM表
             const createKey = (item) => `${item.title.trim()}::${item.spec.trim()}`;
             const bom2Map = new Map(bom2Items.map(item => [createKey(item), item]));
 
@@ -165,7 +174,7 @@
                     } else {
                         commonDiffQuantity.push({ ...item1, quantity2: item2.quantity });
                     }
-                    bom2Map.delete(key); // 從 map 中移除已配對的項目
+                    bom2Map.delete(key); 
                 } else {
                     bom1Only.push(item1);
                 }
@@ -178,6 +187,65 @@
             renderTable('common-items', '共同項目 (數量相同)', commonSameQuantity, ['#16a34a', '#15803d']); // 綠色
             renderTable('bom1-only-items', '僅 BOM 1 擁有', bom1Only, ['#ea580c', '#c2410c']); // 橘色
             renderTable('bom2-only-items', '僅 BOM 2 擁有', bom2Only, ['#2563eb', '#1d4ed8']); // 藍色
+        }
+
+        // 找出列表內部重複項目的輔助函式
+        function findDuplicates(items, bomName) {
+            const createKey = (item) => `${item.title.trim()}::${item.spec.trim()}`;
+            const seen = new Set();
+            const duplicates = new Set();
+            
+            for (const item of items) {
+                const key = createKey(item);
+                if (seen.has(key)) {
+                    duplicates.add(key);
+                } else {
+                    seen.add(key);
+                }
+            }
+
+            return items
+                .filter(item => duplicates.has(createKey(item)))
+                .map(item => ({ ...item, bomSource: bomName }));
+        }
+
+        // 渲染內部重複項目的表格
+        function renderDuplicatesTable(elementId, title, items, colors) {
+            const container = document.getElementById(elementId);
+            if (!items || items.length === 0) {
+                container.classList.add('hidden');
+                return;
+            }
+            container.classList.remove('hidden');
+
+            let html = `
+                <h2 class="text-2xl font-bold mb-4 text-center" style="color: ${colors[0]};">${title} (${items.length})</h2>
+                <div class="overflow-x-auto max-h-96 border border-gray-200 rounded-lg">
+                    <table class="w-full text-sm text-left">
+                        <thead class="text-xs text-gray-600 uppercase table-header">
+                            <tr>
+                                <th scope="col" class="table-cell">來源BOM</th>
+                                <th scope="col" class="table-cell">標題</th>
+                                <th scope="col" class="table-cell">規格</th>
+                                <th scope="col" class="table-cell">廠商</th>
+                                <th scope="col" class="table-cell">數量</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white">`;
+            
+            items.forEach(item => {
+                html += `
+                    <tr class="hover:bg-red-50">
+                        <td class="table-cell text-red-700 font-semibold">${item.bomSource}</td>
+                        <td class="table-cell text-gray-900">${item.title}</td>
+                        <td class="table-cell text-gray-900">${item.spec}</td>
+                        <td class="table-cell text-gray-900">${item.vendor}</td>
+                        <td class="table-cell text-gray-900">${item.quantity}</td>
+                    </tr>`;
+            });
+
+            html += `</tbody></table></div>`;
+            container.innerHTML = html;
         }
 
         // 渲染數量不匹配的表格

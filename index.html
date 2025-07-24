@@ -20,6 +20,10 @@
             top: 0;
             background-color: #F9FAFB; /* gray-50 */
         }
+        .highlight-diff {
+            background-color: #FEF9C3; /* yellow-100 */
+            font-weight: bold;
+        }
     </style>
 </head>
 <body class="bg-gray-100 text-gray-800">
@@ -27,15 +31,15 @@
     <div class="container mx-auto p-4 md:p-8">
         <header class="text-center mb-8">
             <h1 class="text-3xl md:text-4xl font-bold text-gray-900">BOM 內容比較工具</h1>
-            <p class="text-gray-600 mt-2">請貼上從 Google 試算表「發佈到網路」產生的 CSV 連結</p>
+            <p class="text-gray-600 mt-2">自動讀取您的 Google Sheet 並分析項目與數量差異</p>
         </header>
 
         <!-- 輸入區 -->
         <div class="max-w-2xl mx-auto bg-white p-6 rounded-lg shadow-md">
             <div class="flex flex-col sm:flex-row gap-4">
-                <input type="url" id="sheet-url" placeholder="在此貼上您的 .csv 連結" class="w-full px-4 py-2 bg-white text-gray-900 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 transition" value="https://docs.google.com/spreadsheets/d/e/2PACX-1vTbw3ChXHdZldhcCozieqaPxux2DW9ZPOu4IQt345lnNZ810OeZHsKl6XshLw9i66c05BwafWKgX6jI/pub?gid=0&single=true&output=csv">
+                <input type="url" id="sheet-url" placeholder="在此貼上您的 .csv 連結" class="w-full px-4 py-2 bg-gray-50 text-gray-900 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 transition" value="https://docs.google.com/spreadsheets/d/e/2PACX-1vTbw3ChXHdZldhcCozieqaPxux2DW9ZPOu4IQt345lnNZ810OeZHsKl6XshLw9i66c05BwafWKgX6jI/pub?gid=0&single=true&output=csv" readonly>
                 <button id="compare-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-md transition duration-300 ease-in-out transform hover:scale-105">
-                    手動比較
+                    重新整理
                 </button>
             </div>
         </div>
@@ -43,7 +47,9 @@
         <!-- 狀態與結果顯示區 -->
         <div id="status" class="text-center my-6 text-lg text-gray-600"></div>
 
-        <div id="results-container" class="mt-8 grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div id="results-container" class="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <!-- 數量不同 -->
+            <div id="quantity-mismatch-items" class="bg-white p-6 rounded-lg shadow-md hidden lg:col-span-2"></div>
             <!-- 共同項目 -->
             <div id="common-items" class="bg-white p-6 rounded-lg shadow-md hidden"></div>
             <!-- BOM1 獨有 -->
@@ -56,10 +62,7 @@
     <script>
         // 頁面載入時自動觸發比較
         window.addEventListener('load', () => {
-            // 使用 setTimeout 確保頁面元素都已渲染完成
-            setTimeout(() => {
-                document.getElementById('compare-btn').click();
-            }, 100);
+            setTimeout(() => document.getElementById('compare-btn').click(), 100);
         });
 
         // 監聽按鈕點擊事件
@@ -70,50 +73,40 @@
             const urlInput = document.getElementById('sheet-url');
             const url = urlInput.value.trim();
             const statusDiv = document.getElementById('status');
-            const resultsContainer = document.getElementById('results-container');
-
+            
             // 清空舊的結果和狀態
-            statusDiv.innerHTML = ''; // 改為 innerHTML 以便插入多行
-            document.getElementById('common-items').innerHTML = '';
-            document.getElementById('bom1-only-items').innerHTML = '';
-            document.getElementById('bom2-only-items').innerHTML = '';
+            statusDiv.innerHTML = '';
+            document.getElementById('quantity-mismatch-items').classList.add('hidden');
             document.getElementById('common-items').classList.add('hidden');
             document.getElementById('bom1-only-items').classList.add('hidden');
             document.getElementById('bom2-only-items').classList.add('hidden');
 
-
             if (!url) {
-                statusDiv.textContent = '錯誤：請先輸入 Google Sheet 的 CSV 連結。';
+                statusDiv.textContent = '錯誤：找不到 Google Sheet 的 CSV 連結。';
                 statusDiv.className = 'text-center my-6 text-lg text-red-600';
                 return;
             }
 
-            statusDiv.textContent = '正在從 Google Sheet 讀取資料...';
+            statusDiv.textContent = '正在從 Google Sheet 讀取最新資料...';
             statusDiv.className = 'text-center my-6 text-lg text-blue-600';
 
             try {
                 // 使用 fetch 取得 CSV 資料，並加入快取破壞參數
                 const response = await fetch(`${url}&_=${new Date().getTime()}`);
-                if (!response.ok) {
-                    throw new Error(`網路錯誤: ${response.status} ${response.statusText}`);
-                }
+                if (!response.ok) throw new Error(`網路錯誤: ${response.status} ${response.statusText}`);
                 const csvText = await response.text();
 
                 statusDiv.innerHTML = '資料讀取完畢，正在進行分析...';
-                
-                // 解析並比較 BOM
                 parseAndCompareBOMs(csvText);
 
-                // 延遲一小段時間讓使用者看到分析過程
                 setTimeout(() => {
                     statusDiv.innerHTML += '<br><b>比較完成！</b>';
                     statusDiv.className = 'text-center my-6 text-lg text-green-600';
                 }, 300);
 
-
             } catch (error) {
                 console.error('處理時發生錯誤:', error);
-                statusDiv.textContent = `發生錯誤：${error.message}。請檢查連結是否正確，或開啟瀏覽器開發者工具(F12)查看詳細資訊。`;
+                statusDiv.textContent = `發生錯誤：${error.message}。請檢查連結是否正確。`;
                 statusDiv.className = 'text-center my-6 text-lg text-red-600';
             }
         }
@@ -123,72 +116,105 @@
             const statusDiv = document.getElementById('status');
             const rows = csvText.split('\n').map(row => row.trim().split(','));
             
-            statusDiv.innerHTML += `<br>偵測到 ${rows.length} 行資料。`;
-
             const bom1Items = [];
             const bom2Items = [];
 
             // 從第三行開始讀取資料 (索引為 2)
             for (let i = 2; i < rows.length; i++) {
                 const row = rows[i];
-                if (!row || row.length < 2) continue; // 跳過空行或不完整的行
+                if (!row || row.length === 0 || row.every(cell => !cell)) continue;
                 
-                // 處理 BOM 1 (A, B, C, D 欄)
-                const bom1Title = row[0] || '';
-                const bom1Spec = row[1] || '';
-                if (bom1Title || bom1Spec) { // 至少要有標題或規格才算一筆資料
-                    bom1Items.push({
-                        title: bom1Title,
-                        spec: bom1Spec,
-                        vendor: row[2] || '',
-                        quantity: row[3] || ''
-                    });
+                if (row[0] || row[1]) {
+                    bom1Items.push({ title: row[0] || '', spec: row[1] || '', vendor: row[2] || '', quantity: row[3] || '' });
                 }
-
-                // 處理 BOM 2 (E, F, G, H 欄)
-                const bom2Title = row[4] || '';
-                const bom2Spec = row[5] || '';
-                 if (bom2Title || bom2Spec) {
-                    bom2Items.push({
-                        title: bom2Title,
-                        spec: bom2Spec,
-                        vendor: row[6] || '',
-                        quantity: row[7] || ''
-                    });
+                if (row[4] || row[5]) {
+                    bom2Items.push({ title: row[4] || '', spec: row[5] || '', vendor: row[6] || '', quantity: row[7] || '' });
                 }
             }
             
-            statusDiv.innerHTML += `<br>成功解析 BOM 1 項目: ${bom1Items.length} 個。`;
-            statusDiv.innerHTML += `<br>成功解析 BOM 2 項目: ${bom2Items.length} 個。`;
+            statusDiv.innerHTML += `<br>BOM 1: ${bom1Items.length} 項 | BOM 2: ${bom2Items.length} 項`;
 
-            // 使用 "標題+規格" 作為唯一鍵來比較
             const createKey = (item) => `${item.title.trim()}::${item.spec.trim()}`;
+            const bom2Map = new Map(bom2Items.map(item => [createKey(item), item]));
 
-            const bom1Keys = new Set(bom1Items.map(createKey));
-            const bom2Keys = new Set(bom2Items.map(createKey));
+            const commonSameQuantity = [];
+            const commonDiffQuantity = [];
+            const bom1Only = [];
 
-            // 找出共同、獨有項目
-            const commonItems = bom1Items.filter(item => bom2Keys.has(createKey(item)));
-            const bom1OnlyItems = bom1Items.filter(item => !bom2Keys.has(createKey(item)));
-            const bom2OnlyItems = bom2Items.filter(item => !bom1Keys.has(createKey(item)));
+            for (const item1 of bom1Items) {
+                const key = createKey(item1);
+                if (bom2Map.has(key)) {
+                    const item2 = bom2Map.get(key);
+                    if (item1.quantity.trim() === item2.quantity.trim()) {
+                        commonSameQuantity.push(item1);
+                    } else {
+                        commonDiffQuantity.push({ ...item1, quantity2: item2.quantity });
+                    }
+                    bom2Map.delete(key); // 從 map 中移除已配對的項目
+                } else {
+                    bom1Only.push(item1);
+                }
+            }
+
+            const bom2Only = Array.from(bom2Map.values());
 
             // 渲染結果到畫面上
-            renderTable('common-items', '共同項目', commonItems, ['#16a34a', '#15803d']); // 綠色
-            renderTable('bom1-only-items', '僅 BOM 1 擁有', bom1OnlyItems, ['#ea580c', '#c2410c']); // 橘色
-            renderTable('bom2-only-items', '僅 BOM 2 擁有', bom2OnlyItems, ['#2563eb', '#1d4ed8']); // 藍色
+            renderMismatchTable('quantity-mismatch-items', '共同項目 (數量不同)', commonDiffQuantity, ['#D97706', '#B45309']); // Amber
+            renderTable('common-items', '共同項目 (數量相同)', commonSameQuantity, ['#16a34a', '#15803d']); // 綠色
+            renderTable('bom1-only-items', '僅 BOM 1 擁有', bom1Only, ['#ea580c', '#c2410c']); // 橘色
+            renderTable('bom2-only-items', '僅 BOM 2 擁有', bom2Only, ['#2563eb', '#1d4ed8']); // 藍色
         }
 
-        // 渲染表格的輔助函式
-        function renderTable(elementId, title, items, colors) {
+        // 渲染數量不匹配的表格
+        function renderMismatchTable(elementId, title, items, colors) {
             const container = document.getElementById(elementId);
-            if (!container) return;
-            
+            if (!items || items.length === 0) {
+                container.classList.add('hidden');
+                return;
+            }
             container.classList.remove('hidden');
 
             let html = `
-                <h2 class="text-2xl font-bold mb-4 text-center" style="color: ${colors[0]};">
-                    ${title} (${items.length})
-                </h2>
+                <h2 class="text-2xl font-bold mb-4 text-center" style="color: ${colors[0]};">${title} (${items.length})</h2>
+                <div class="overflow-x-auto max-h-96 border border-gray-200 rounded-lg">
+                    <table class="w-full text-sm text-left">
+                        <thead class="text-xs text-gray-600 uppercase table-header">
+                            <tr>
+                                <th scope="col" class="table-cell">標題</th>
+                                <th scope="col" class="table-cell">規格</th>
+                                <th scope="col" class="table-cell">廠商</th>
+                                <th scope="col" class="table-cell text-center">數量 (BOM1)</th>
+                                <th scope="col" class="table-cell text-center">數量 (BOM2)</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white">`;
+            
+            items.forEach(item => {
+                html += `
+                    <tr class="hover:bg-gray-50">
+                        <td class="table-cell text-gray-900">${item.title}</td>
+                        <td class="table-cell text-gray-900">${item.spec}</td>
+                        <td class="table-cell text-gray-900">${item.vendor}</td>
+                        <td class="table-cell text-gray-900 text-center highlight-diff">${item.quantity}</td>
+                        <td class="table-cell text-gray-900 text-center highlight-diff">${item.quantity2}</td>
+                    </tr>`;
+            });
+
+            html += `</tbody></table></div>`;
+            container.innerHTML = html;
+        }
+
+        // 渲染一般表格
+        function renderTable(elementId, title, items, colors) {
+            const container = document.getElementById(elementId);
+            if (!items || items.length === 0) {
+                container.classList.add('hidden');
+                return;
+            }
+            container.classList.remove('hidden');
+
+            let html = `
+                <h2 class="text-2xl font-bold mb-4 text-center" style="color: ${colors[0]};">${title} (${items.length})</h2>
                 <div class="overflow-x-auto max-h-96 border border-gray-200 rounded-lg">
                     <table class="w-full text-sm text-left">
                         <thead class="text-xs text-gray-600 uppercase table-header">
@@ -199,23 +225,17 @@
                                 <th scope="col" class="table-cell">數量</th>
                             </tr>
                         </thead>
-                        <tbody class="bg-white">
-            `;
+                        <tbody class="bg-white">`;
 
-            if (items.length === 0) {
-                html += `<tr><td colspan="4" class="text-center py-4 text-gray-500">無項目</td></tr>`;
-            } else {
-                items.forEach(item => {
-                    html += `
-                        <tr class="hover:bg-gray-50">
-                            <td class="table-cell text-gray-900">${item.title}</td>
-                            <td class="table-cell text-gray-900">${item.spec}</td>
-                            <td class="table-cell text-gray-900">${item.vendor}</td>
-                            <td class="table-cell text-gray-900">${item.quantity}</td>
-                        </tr>
-                    `;
-                });
-            }
+            items.forEach(item => {
+                html += `
+                    <tr class="hover:bg-gray-50">
+                        <td class="table-cell text-gray-900">${item.title}</td>
+                        <td class="table-cell text-gray-900">${item.spec}</td>
+                        <td class="table-cell text-gray-900">${item.vendor}</td>
+                        <td class="table-cell text-gray-900">${item.quantity}</td>
+                    </tr>`;
+            });
 
             html += `</tbody></table></div>`;
             container.innerHTML = html;

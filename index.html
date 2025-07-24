@@ -48,6 +48,8 @@
         <div id="status" class="text-center my-6 text-lg text-gray-600"></div>
 
         <div id="results-container" class="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <!-- 合併總表 -->
+            <div id="consolidated-items" class="bg-white p-6 rounded-lg shadow-md hidden lg:col-span-2"></div>
             <!-- 內部重複項目 -->
             <div id="duplicate-items" class="bg-white p-6 rounded-lg shadow-md hidden lg:col-span-2"></div>
             <!-- 數量不同 -->
@@ -78,6 +80,7 @@
             
             // 清空舊的結果和狀態
             statusDiv.innerHTML = '';
+            document.getElementById('consolidated-items').classList.add('hidden');
             document.getElementById('duplicate-items').classList.add('hidden');
             document.getElementById('quantity-mismatch-items').classList.add('hidden');
             document.getElementById('common-items').classList.add('hidden');
@@ -94,12 +97,10 @@
             statusDiv.className = 'text-center my-6 text-lg text-blue-600';
 
             try {
-                // 使用 fetch 取得 CSV 資料，並加入快取破壞參數
                 const response = await fetch(`${url}&_=${new Date().getTime()}`);
                 if (!response.ok) throw new Error(`網路錯誤: ${response.status} ${response.statusText}`);
                 const csvText = await response.text();
 
-                // 增加對空資料的檢查
                 if (typeof csvText !== 'string' || csvText.trim() === '') {
                     statusDiv.textContent = '讀取到的資料為空或格式不正確。';
                     statusDiv.className = 'text-center my-6 text-lg text-orange-500';
@@ -124,43 +125,36 @@
         // 解析 CSV 並比較 BOM
         function parseAndCompareBOMs(csvText) {
             const statusDiv = document.getElementById('status');
-            // 使用正則表達式來處理不同的換行符號
             const rowsText = csvText.split(/\r?\n/);
             
             const bom1Items = [];
             const bom2Items = [];
 
-            // 從第三行開始讀取資料 (索引為 2)
             for (let i = 2; i < rowsText.length; i++) {
                 const rowText = rowsText[i].trim();
-                if (!rowText) continue; // 跳過空行
-
+                if (!rowText) continue;
                 const row = rowText.split(',');
+                while (row.length < 8) row.push('');
                 
-                while (row.length < 8) {
-                    row.push('');
-                }
-                
-                if (row[0] || row[1]) {
-                    bom1Items.push({ title: row[0] || '', spec: row[1] || '', vendor: row[2] || '', quantity: row[3] || '' });
-                }
-                if (row[4] || row[5]) {
-                    bom2Items.push({ title: row[4] || '', spec: row[5] || '', vendor: row[6] || '', quantity: row[7] || '' });
-                }
+                if (row[0] || row[1]) bom1Items.push({ title: row[0] || '', spec: row[1] || '', vendor: row[2] || '', quantity: row[3] || '' });
+                if (row[4] || row[5]) bom2Items.push({ title: row[4] || '', spec: row[5] || '', vendor: row[6] || '', quantity: row[7] || '' });
             }
             
             statusDiv.innerHTML += `<br>BOM 1: ${bom1Items.length} 項 | BOM 2: ${bom2Items.length} 項`;
 
+            const createKey = (item) => `${item.title.trim()}::${item.spec.trim()}`;
+
             // 1. 找出內部重複項目
             const duplicates1 = findDuplicates(bom1Items, 'BOM 1');
             const duplicates2 = findDuplicates(bom2Items, 'BOM 2');
-            const allDuplicates = [...duplicates1, ...duplicates2];
-            renderDuplicatesTable('duplicate-items', '內部重複項目', allDuplicates, ['#EF4444', '#DC2626']); // 紅色
+            renderDuplicatesTable('duplicate-items', '內部重複項目', [...duplicates1, ...duplicates2], ['#EF4444', '#DC2626']);
 
-            // 2. 比較兩個BOM表
-            const createKey = (item) => `${item.title.trim()}::${item.spec.trim()}`;
+            // 2. 建立合併總表
+            const consolidatedList = createConsolidatedList(bom1Items, bom2Items, createKey);
+            renderConsolidatedTable('consolidated-items', 'BOM 合併總表', consolidatedList);
+
+            // 3. 比較兩個BOM表
             const bom2Map = new Map(bom2Items.map(item => [createKey(item), item]));
-
             const commonSameQuantity = [];
             const commonDiffQuantity = [];
             const bom1Only = [];
@@ -179,37 +173,101 @@
                     bom1Only.push(item1);
                 }
             }
-
             const bom2Only = Array.from(bom2Map.values());
 
-            // 渲染結果到畫面上
-            renderMismatchTable('quantity-mismatch-items', '共同項目 (數量不同)', commonDiffQuantity, ['#D97706', '#B45309']); // Amber
-            renderTable('common-items', '共同項目 (數量相同)', commonSameQuantity, ['#16a34a', '#15803d']); // 綠色
-            renderTable('bom1-only-items', '僅 BOM 1 擁有', bom1Only, ['#ea580c', '#c2410c']); // 橘色
-            renderTable('bom2-only-items', '僅 BOM 2 擁有', bom2Only, ['#2563eb', '#1d4ed8']); // 藍色
+            renderMismatchTable('quantity-mismatch-items', '共同項目 (數量不同)', commonDiffQuantity, ['#D97706', '#B45309']);
+            renderTable('common-items', '共同項目 (數量相同)', commonSameQuantity, ['#16a34a', '#15803d']);
+            renderTable('bom1-only-items', '僅 BOM 1 擁有', bom1Only, ['#ea580c', '#c2410c']);
+            renderTable('bom2-only-items', '僅 BOM 2 擁有', bom2Only, ['#2563eb', '#1d4ed8']);
         }
-
-        // 找出列表內部重複項目的輔助函式
-        function findDuplicates(items, bomName) {
-            const createKey = (item) => `${item.title.trim()}::${item.spec.trim()}`;
-            const seen = new Set();
-            const duplicates = new Set();
-            
-            for (const item of items) {
+        
+        // 建立合併總表的輔助函式
+        function createConsolidatedList(bom1Items, bom2Items, createKey) {
+            const consolidatedMap = new Map();
+            bom1Items.forEach(item => {
                 const key = createKey(item);
-                if (seen.has(key)) {
-                    duplicates.add(key);
-                } else {
-                    seen.add(key);
+                if (!consolidatedMap.has(key)) {
+                    consolidatedMap.set(key, { ...item, quantity1: item.quantity, quantity2: null });
                 }
-            }
-
-            return items
-                .filter(item => duplicates.has(createKey(item)))
-                .map(item => ({ ...item, bomSource: bomName }));
+            });
+            bom2Items.forEach(item => {
+                const key = createKey(item);
+                if (consolidatedMap.has(key)) {
+                    consolidatedMap.get(key).quantity2 = item.quantity;
+                } else {
+                    consolidatedMap.set(key, { ...item, quantity1: null, quantity2: item.quantity });
+                }
+            });
+            return Array.from(consolidatedMap.values());
         }
 
-        // 渲染內部重複項目的表格
+        function findDuplicates(items, bomName) {
+            const seen = new Set(), duplicates = new Set();
+            const createKey = (item) => `${item.title.trim()}::${item.spec.trim()}`;
+            items.forEach(item => {
+                const key = createKey(item);
+                seen.has(key) ? duplicates.add(key) : seen.add(key);
+            });
+            return items.filter(item => duplicates.has(createKey(item))).map(item => ({ ...item, bomSource: bomName }));
+        }
+
+        // 渲染合併總表的表格
+        function renderConsolidatedTable(elementId, title, items) {
+            const container = document.getElementById(elementId);
+            if (!items || items.length === 0) {
+                container.classList.add('hidden');
+                return;
+            }
+            container.classList.remove('hidden');
+
+            let html = `
+                <h2 class="text-2xl font-bold mb-4 text-center" style="color: #111827;">${title} (${items.length})</h2>
+                <div class="overflow-x-auto max-h-96 border border-gray-200 rounded-lg">
+                    <table class="w-full text-sm text-left">
+                        <thead class="text-xs text-gray-600 uppercase table-header">
+                            <tr>
+                                <th scope="col" class="table-cell">標題</th>
+                                <th scope="col" class="table-cell">規格</th>
+                                <th scope="col" class="table-cell">廠商</th>
+                                <th scope="col" class="table-cell text-center">數量(BOM1)</th>
+                                <th scope="col" class="table-cell text-center">數量(BOM2)</th>
+                                <th scope="col" class="table-cell text-center">狀態</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white">`;
+            
+            items.forEach(item => {
+                const qty1 = item.quantity1;
+                const qty2 = item.quantity2;
+                let statusHtml = '';
+
+                if (qty1 !== null && qty2 !== null) {
+                    if (String(qty1).trim() === String(qty2).trim()) {
+                        statusHtml = `<span class="px-2 py-1 text-xs font-semibold text-green-800 bg-green-100 rounded-full">數量相同</span>`;
+                    } else {
+                        statusHtml = `<span class="px-2 py-1 text-xs font-semibold text-yellow-800 bg-yellow-100 rounded-full">數量不同</span>`;
+                    }
+                } else if (qty1 !== null) {
+                    statusHtml = `<span class="px-2 py-1 text-xs font-semibold text-orange-800 bg-orange-100 rounded-full">僅BOM1</span>`;
+                } else {
+                    statusHtml = `<span class="px-2 py-1 text-xs font-semibold text-blue-800 bg-blue-100 rounded-full">僅BOM2</span>`;
+                }
+
+                html += `
+                    <tr class="hover:bg-gray-50">
+                        <td class="table-cell text-gray-900">${item.title}</td>
+                        <td class="table-cell text-gray-900">${item.spec}</td>
+                        <td class="table-cell text-gray-900">${item.vendor}</td>
+                        <td class="table-cell text-gray-900 text-center">${qty1 !== null ? qty1 : '-'}</td>
+                        <td class="table-cell text-gray-900 text-center">${qty2 !== null ? qty2 : '-'}</td>
+                        <td class="table-cell text-center">${statusHtml}</td>
+                    </tr>`;
+            });
+
+            html += `</tbody></table></div>`;
+            container.innerHTML = html;
+        }
+
         function renderDuplicatesTable(elementId, title, items, colors) {
             const container = document.getElementById(elementId);
             if (!items || items.length === 0) {
@@ -248,7 +306,6 @@
             container.innerHTML = html;
         }
 
-        // 渲染數量不匹配的表格
         function renderMismatchTable(elementId, title, items, colors) {
             const container = document.getElementById(elementId);
             if (!items || items.length === 0) {
@@ -287,7 +344,6 @@
             container.innerHTML = html;
         }
 
-        // 渲染一般表格
         function renderTable(elementId, title, items, colors) {
             const container = document.getElementById(elementId);
             if (!items || items.length === 0) {

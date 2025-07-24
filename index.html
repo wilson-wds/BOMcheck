@@ -41,7 +41,7 @@
         </div>
 
         <!-- 狀態與結果顯示區 -->
-        <div id="status" class="text-center my-6 text-lg text-yellow-600"></div>
+        <div id="status" class="text-center my-6 text-lg text-gray-600"></div>
 
         <div id="results-container" class="mt-8 grid grid-cols-1 lg:grid-cols-3 gap-6">
             <!-- 共同項目 -->
@@ -73,7 +73,7 @@
             const resultsContainer = document.getElementById('results-container');
 
             // 清空舊的結果和狀態
-            statusDiv.textContent = '';
+            statusDiv.innerHTML = ''; // 改為 innerHTML 以便插入多行
             document.getElementById('common-items').innerHTML = '';
             document.getElementById('bom1-only-items').innerHTML = '';
             document.getElementById('bom2-only-items').innerHTML = '';
@@ -99,13 +99,17 @@
                 }
                 const csvText = await response.text();
 
-                statusDiv.textContent = '資料讀取完畢，正在進行分析...';
+                statusDiv.innerHTML = '資料讀取完畢，正在進行分析...';
                 
                 // 解析並比較 BOM
                 parseAndCompareBOMs(csvText);
 
-                statusDiv.textContent = '比較完成！';
-                statusDiv.className = 'text-center my-6 text-lg text-green-600';
+                // 延遲一小段時間讓使用者看到分析過程
+                setTimeout(() => {
+                    statusDiv.innerHTML += '<br><b>比較完成！</b>';
+                    statusDiv.className = 'text-center my-6 text-lg text-green-600';
+                }, 300);
+
 
             } catch (error) {
                 console.error('處理時發生錯誤:', error);
@@ -116,12 +120,10 @@
 
         // 解析 CSV 並比較 BOM
         function parseAndCompareBOMs(csvText) {
+            const statusDiv = document.getElementById('status');
             const rows = csvText.split('\n').map(row => row.trim().split(','));
-
-            // 預期 A2, B2, C2, D2 是 BOM1 的標頭
-            // 預期 F2, G2, H2, I2 是 BOM2 的標頭 (注意:CSV中 E1 會是第4個欄位)
-            // BOM1: 欄位 0, 1, 2, 3
-            // BOM2: 欄位 4, 5, 6, 7 (因為 E1 在 CSV 中是第 5 個欄位)
+            
+            statusDiv.innerHTML += `<br>偵測到 ${rows.length} 行資料。`;
 
             const bom1Items = [];
             const bom2Items = [];
@@ -129,6 +131,7 @@
             // 從第三行開始讀取資料 (索引為 2)
             for (let i = 2; i < rows.length; i++) {
                 const row = rows[i];
+                if (!row || row.length < 2) continue; // 跳過空行或不完整的行
                 
                 // 處理 BOM 1 (A, B, C, D 欄)
                 const bom1Title = row[0] || '';
@@ -154,9 +157,12 @@
                     });
                 }
             }
+            
+            statusDiv.innerHTML += `<br>成功解析 BOM 1 項目: ${bom1Items.length} 個。`;
+            statusDiv.innerHTML += `<br>成功解析 BOM 2 項目: ${bom2Items.length} 個。`;
 
             // 使用 "標題+規格" 作為唯一鍵來比較
-            const createKey = (item) => `${item.title}::${item.spec}`;
+            const createKey = (item) => `${item.title.trim()}::${item.spec.trim()}`;
 
             const bom1Keys = new Set(bom1Items.map(createKey));
             const bom2Keys = new Set(bom2Items.map(createKey));

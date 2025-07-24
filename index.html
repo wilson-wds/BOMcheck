@@ -48,6 +48,8 @@
         <div id="status" class="text-center my-6 text-lg text-gray-600"></div>
 
         <div id="results-container" class="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <!-- 標題相似項目 -->
+            <div id="similar-titles" class="bg-white p-6 rounded-lg shadow-md hidden lg:col-span-2"></div>
             <!-- 合併總表 -->
             <div id="consolidated-items" class="bg-white p-6 rounded-lg shadow-md hidden lg:col-span-2"></div>
             <!-- 內部重複項目 -->
@@ -80,6 +82,7 @@
             
             // 清空舊的結果和狀態
             statusDiv.innerHTML = '';
+            document.getElementById('similar-titles').classList.add('hidden');
             document.getElementById('consolidated-items').classList.add('hidden');
             document.getElementById('duplicate-items').classList.add('hidden');
             document.getElementById('quantity-mismatch-items').classList.add('hidden');
@@ -175,13 +178,52 @@
             }
             const bom2Only = Array.from(bom2Map.values());
 
+            // 4. 找出標題相似項目 (在唯一項目中尋找)
+            const similarTitles = findSimilarTitles(bom1Only, bom2Only, 3); // 相似度閾值設為3
+            renderSimilarTitlesTable('similar-titles', '標題相似項目', similarTitles, ['#8B5CF6', '#7C3AED']);
+
+            // 5. 渲染各類比較結果
             renderMismatchTable('quantity-mismatch-items', '共同項目 (數量不同)', commonDiffQuantity, ['#D97706', '#B45309']);
             renderTable('common-items', '共同項目 (數量相同)', commonSameQuantity, ['#16a34a', '#15803d']);
             renderTable('bom1-only-items', '僅 BOM 1 擁有', bom1Only, ['#ea580c', '#c2410c']);
             renderTable('bom2-only-items', '僅 BOM 2 擁有', bom2Only, ['#2563eb', '#1d4ed8']);
         }
         
-        // 建立合併總表的輔助函式
+        // --- 演算法與輔助函式 ---
+
+        // Levenshtein 距離演算法，計算兩個字串的相似度
+        function levenshteinDistance(a, b) {
+            if (a.length === 0) return b.length;
+            if (b.length === 0) return a.length;
+            const matrix = Array(b.length + 1).fill(null).map(() => Array(a.length + 1).fill(null));
+            for (let i = 0; i <= a.length; i++) { matrix[0][i] = i; }
+            for (let j = 0; j <= b.length; j++) { matrix[j][0] = j; }
+            for (let j = 1; j <= b.length; j++) {
+                for (let i = 1; i <= a.length; i++) {
+                    const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+                    matrix[j][i] = Math.min(matrix[j][i - 1] + 1, matrix[j - 1][i] + 1, matrix[j - 1][i - 1] + cost);
+                }
+            }
+            return matrix[b.length][a.length];
+        }
+
+        // 找出標題相似的項目
+        function findSimilarTitles(bom1Only, bom2Only, threshold) {
+            const similarPairs = [];
+            for (const item1 of bom1Only) {
+                for (const item2 of bom2Only) {
+                    if (item1.title && item2.title) {
+                        const distance = levenshteinDistance(item1.title.trim(), item2.title.trim());
+                        if (distance > 0 && distance <= threshold) {
+                            similarPairs.push({ item1, item2, distance });
+                        }
+                    }
+                }
+            }
+            similarPairs.sort((a, b) => a.distance - b.distance);
+            return similarPairs;
+        }
+        
         function createConsolidatedList(bom1Items, bom2Items, createKey) {
             const consolidatedMap = new Map();
             bom1Items.forEach(item => {
@@ -211,7 +253,46 @@
             return items.filter(item => duplicates.has(createKey(item))).map(item => ({ ...item, bomSource: bomName }));
         }
 
-        // 渲染合併總表的表格
+        // --- 渲染函式 ---
+
+        function renderSimilarTitlesTable(elementId, title, items, colors) {
+            const container = document.getElementById(elementId);
+            if (!items || items.length === 0) {
+                container.classList.add('hidden');
+                return;
+            }
+            container.classList.remove('hidden');
+
+            let html = `
+                <h2 class="text-2xl font-bold mb-4 text-center" style="color: ${colors[0]};">${title} (${items.length})</h2>
+                <div class="overflow-x-auto max-h-96 border border-gray-200 rounded-lg">
+                    <table class="w-full text-sm text-left">
+                        <thead class="text-xs text-gray-600 uppercase table-header">
+                            <tr>
+                                <th scope="col" class="table-cell">BOM 1 標題</th>
+                                <th scope="col" class="table-cell">BOM 1 規格</th>
+                                <th scope="col" class="table-cell">BOM 2 標題</th>
+                                <th scope="col" class="table-cell">BOM 2 規格</th>
+                                <th scope="col" class="table-cell text-center">差異度</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white">`;
+            
+            items.forEach(pair => {
+                html += `
+                    <tr class="hover:bg-violet-50">
+                        <td class="table-cell text-gray-900">${pair.item1.title}</td>
+                        <td class="table-cell text-gray-900">${pair.item1.spec}</td>
+                        <td class="table-cell text-gray-900">${pair.item2.title}</td>
+                        <td class="table-cell text-gray-900">${pair.item2.spec}</td>
+                        <td class="table-cell text-center font-mono text-violet-600">${pair.distance}</td>
+                    </tr>`;
+            });
+
+            html += `</tbody></table></div>`;
+            container.innerHTML = html;
+        }
+
         function renderConsolidatedTable(elementId, title, items) {
             const container = document.getElementById(elementId);
             if (!items || items.length === 0) {

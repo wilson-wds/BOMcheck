@@ -12,28 +12,28 @@
         }
         .table-cell {
             padding: 12px 16px;
-            border-bottom: 1px solid #374151; /* gray-700 */
+            border-bottom: 1px solid #E5E7EB; /* gray-200 */
             white-space: nowrap;
         }
         .table-header {
             position: sticky;
             top: 0;
-            background-color: #1F2937; /* gray-800 */
+            background-color: #F9FAFB; /* gray-50 */
         }
     </style>
 </head>
-<body class="bg-gray-900 text-gray-200">
+<body class="bg-gray-100 text-gray-800">
 
     <div class="container mx-auto p-4 md:p-8">
         <header class="text-center mb-8">
-            <h1 class="text-3xl md:text-4xl font-bold text-white">BOM 內容比較工具</h1>
-            <p class="text-gray-400 mt-2">請貼上從 Google 試算表「發佈到網路」產生的 CSV 連結</p>
+            <h1 class="text-3xl md:text-4xl font-bold text-gray-900">BOM 內容比較工具</h1>
+            <p class="text-gray-600 mt-2">請貼上從 Google 試算表「發佈到網路」產生的 CSV 連結</p>
         </header>
 
         <!-- 輸入區 -->
-        <div class="max-w-2xl mx-auto bg-gray-800 p-6 rounded-lg shadow-lg">
+        <div class="max-w-2xl mx-auto bg-white p-6 rounded-lg shadow-md">
             <div class="flex flex-col sm:flex-row gap-4">
-                <input type="url" id="sheet-url" placeholder="在此貼上您的 .csv 連結" class="w-full px-4 py-2 bg-gray-700 text-white border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 transition">
+                <input type="url" id="sheet-url" placeholder="在此貼上您的 .csv 連結" class="w-full px-4 py-2 bg-white text-gray-900 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 transition">
                 <button id="compare-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-md transition duration-300 ease-in-out transform hover:scale-105">
                     開始比較
                 </button>
@@ -41,15 +41,15 @@
         </div>
 
         <!-- 狀態與結果顯示區 -->
-        <div id="status" class="text-center my-6 text-lg text-yellow-400"></div>
+        <div id="status" class="text-center my-6 text-lg text-yellow-600"></div>
 
         <div id="results-container" class="mt-8 grid grid-cols-1 lg:grid-cols-3 gap-6">
             <!-- 共同項目 -->
-            <div id="common-items" class="bg-gray-800 p-6 rounded-lg shadow-lg hidden"></div>
+            <div id="common-items" class="bg-white p-6 rounded-lg shadow-md hidden"></div>
             <!-- BOM1 獨有 -->
-            <div id="bom1-only-items" class="bg-gray-800 p-6 rounded-lg shadow-lg hidden"></div>
+            <div id="bom1-only-items" class="bg-white p-6 rounded-lg shadow-md hidden"></div>
             <!-- BOM2 獨有 -->
-            <div id="bom2-only-items" class="bg-gray-800 p-6 rounded-lg shadow-lg hidden"></div>
+            <div id="bom2-only-items" class="bg-white p-6 rounded-lg shadow-md hidden"></div>
         </div>
     </div>
 
@@ -76,12 +76,12 @@
 
             if (!url) {
                 statusDiv.textContent = '錯誤：請先輸入 Google Sheet 的 CSV 連結。';
-                statusDiv.className = 'text-center my-6 text-lg text-red-400';
+                statusDiv.className = 'text-center my-6 text-lg text-red-600';
                 return;
             }
 
             statusDiv.textContent = '正在從 Google Sheet 讀取資料...';
-            statusDiv.className = 'text-center my-6 text-lg text-blue-400';
+            statusDiv.className = 'text-center my-6 text-lg text-blue-600';
 
             try {
                 // 使用 fetch 取得 CSV 資料
@@ -97,12 +97,12 @@
                 parseAndCompareBOMs(csvText);
 
                 statusDiv.textContent = '比較完成！';
-                statusDiv.className = 'text-center my-6 text-lg text-green-400';
+                statusDiv.className = 'text-center my-6 text-lg text-green-600';
 
             } catch (error) {
                 console.error('處理時發生錯誤:', error);
                 statusDiv.textContent = `發生錯誤：${error.message}。請檢查連結是否正確，或開啟瀏覽器開發者工具(F12)查看詳細資訊。`;
-                statusDiv.className = 'text-center my-6 text-lg text-red-400';
+                statusDiv.className = 'text-center my-6 text-lg text-red-600';
             }
         }
 
@@ -159,9 +159,9 @@
             const bom2OnlyItems = bom2Items.filter(item => !bom1Keys.has(createKey(item)));
 
             // 渲染結果到畫面上
-            renderTable('common-items', '共同項目', commonItems, ['#22c55e', '#16a34a']); // 綠色
-            renderTable('bom1-only-items', '僅 BOM 1 擁有', bom1OnlyItems, ['#f97316', '#ea580c']); // 橘色
-            renderTable('bom2-only-items', '僅 BOM 2 擁有', bom2OnlyItems, ['#3b82f6', '#2563eb']); // 藍色
+            renderTable('common-items', '共同項目', commonItems, ['#16a34a', '#15803d']); // 綠色
+            renderTable('bom1-only-items', '僅 BOM 1 擁有', bom1OnlyItems, ['#ea580c', '#c2410c']); // 橘色
+            renderTable('bom2-only-items', '僅 BOM 2 擁有', bom2OnlyItems, ['#2563eb', '#1d4ed8']); // 藍色
         }
 
         // 渲染表格的輔助函式
@@ -175,9 +175,9 @@
                 <h2 class="text-2xl font-bold mb-4 text-center" style="color: ${colors[0]};">
                     ${title} (${items.length})
                 </h2>
-                <div class="overflow-x-auto max-h-96">
+                <div class="overflow-x-auto max-h-96 border border-gray-200 rounded-lg">
                     <table class="w-full text-sm text-left">
-                        <thead class="text-xs text-gray-300 uppercase table-header">
+                        <thead class="text-xs text-gray-600 uppercase table-header">
                             <tr>
                                 <th scope="col" class="table-cell">標題</th>
                                 <th scope="col" class="table-cell">規格</th>
@@ -185,7 +185,7 @@
                                 <th scope="col" class="table-cell">數量</th>
                             </tr>
                         </thead>
-                        <tbody>
+                        <tbody class="bg-white">
             `;
 
             if (items.length === 0) {
@@ -193,11 +193,11 @@
             } else {
                 items.forEach(item => {
                     html += `
-                        <tr class="hover:bg-gray-700">
-                            <td class="table-cell">${item.title}</td>
-                            <td class="table-cell">${item.spec}</td>
-                            <td class="table-cell">${item.vendor}</td>
-                            <td class="table-cell">${item.quantity}</td>
+                        <tr class="hover:bg-gray-50">
+                            <td class="table-cell text-gray-900">${item.title}</td>
+                            <td class="table-cell text-gray-900">${item.spec}</td>
+                            <td class="table-cell text-gray-900">${item.vendor}</td>
+                            <td class="table-cell text-gray-900">${item.quantity}</td>
                         </tr>
                     `;
                 });

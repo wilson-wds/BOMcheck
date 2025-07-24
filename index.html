@@ -33,9 +33,9 @@
         <!-- 輸入區 -->
         <div class="max-w-2xl mx-auto bg-white p-6 rounded-lg shadow-md">
             <div class="flex flex-col sm:flex-row gap-4">
-                <input type="url" id="sheet-url" placeholder="在此貼上您的 .csv 連結" class="w-full px-4 py-2 bg-white text-gray-900 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 transition">
+                <input type="url" id="sheet-url" placeholder="在此貼上您的 .csv 連結" class="w-full px-4 py-2 bg-white text-gray-900 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 transition" value="https://docs.google.com/spreadsheets/d/e/2PACX-1vTbw3ChXHdZldhcCozieqaPxux2DW9ZPOu4IQt345lnNZ810OeZHsKl6XshLw9i66c05BwafWKgX6jI/pub?gid=0&single=true&output=csv">
                 <button id="compare-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-md transition duration-300 ease-in-out transform hover:scale-105">
-                    開始比較
+                    手動比較
                 </button>
             </div>
         </div>
@@ -54,6 +54,14 @@
     </div>
 
     <script>
+        // 頁面載入時自動觸發比較
+        window.addEventListener('load', () => {
+            // 使用 setTimeout 確保頁面元素都已渲染完成
+            setTimeout(() => {
+                document.getElementById('compare-btn').click();
+            }, 100);
+        });
+
         // 監聽按鈕點擊事件
         document.getElementById('compare-btn').addEventListener('click', handleCompare);
 
@@ -84,8 +92,8 @@
             statusDiv.className = 'text-center my-6 text-lg text-blue-600';
 
             try {
-                // 使用 fetch 取得 CSV 資料
-                const response = await fetch(url);
+                // 使用 fetch 取得 CSV 資料，並加入快取破壞參數
+                const response = await fetch(`${url}&_=${new Date().getTime()}`);
                 if (!response.ok) {
                     throw new Error(`網路錯誤: ${response.status} ${response.statusText}`);
                 }

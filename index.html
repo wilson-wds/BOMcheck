@@ -96,6 +96,13 @@
                 if (!response.ok) throw new Error(`網路錯誤: ${response.status} ${response.statusText}`);
                 const csvText = await response.text();
 
+                // 增加對空資料的檢查
+                if (typeof csvText !== 'string' || csvText.trim() === '') {
+                    statusDiv.textContent = '讀取到的資料為空或格式不正確。';
+                    statusDiv.className = 'text-center my-6 text-lg text-orange-500';
+                    return;
+                }
+
                 statusDiv.innerHTML = '資料讀取完畢，正在進行分析...';
                 parseAndCompareBOMs(csvText);
 
@@ -114,15 +121,23 @@
         // 解析 CSV 並比較 BOM
         function parseAndCompareBOMs(csvText) {
             const statusDiv = document.getElementById('status');
-            const rows = csvText.split('\n').map(row => row.trim().split(','));
+            // 使用正則表達式來處理不同的換行符號
+            const rowsText = csvText.split(/\r?\n/);
             
             const bom1Items = [];
             const bom2Items = [];
 
             // 從第三行開始讀取資料 (索引為 2)
-            for (let i = 2; i < rows.length; i++) {
-                const row = rows[i];
-                if (!row || row.length === 0 || row.every(cell => !cell)) continue;
+            for (let i = 2; i < rowsText.length; i++) {
+                const rowText = rowsText[i].trim();
+                if (!rowText) continue; // 跳過空行
+
+                const row = rowText.split(',');
+                
+                // **重要修正**: 確保每行至少有8個欄位，不足則補上空字串
+                while (row.length < 8) {
+                    row.push('');
+                }
                 
                 if (row[0] || row[1]) {
                     bom1Items.push({ title: row[0] || '', spec: row[1] || '', vendor: row[2] || '', quantity: row[3] || '' });
